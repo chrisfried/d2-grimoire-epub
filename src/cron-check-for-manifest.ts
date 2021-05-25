@@ -1,16 +1,92 @@
 #!/usr/bin/env node
 
-import btoa from 'btoa';
 import fetch from 'cross-fetch';
-import { getDestinyManifest } from 'bungie-api-ts/destiny2';
+import { DestinyLoreDefinition, getDestinyManifest } from 'bungie-api-ts/destiny2';
 import { generateHttpClient } from '@d2api/manifest';
 import latest from '../latest.json';
 import fse from 'fs-extra';
+import * as nodepub from 'nodepub';
 
 const { writeFileSync } = fse;
 const httpClient = generateHttpClient(fetch, process.env.API_KEY);
 
 const skipCheck = process.env.SKIP_CHECK === 'true' ? true : false;
+
+const generateEpubs = async function (
+  contentPaths: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  },
+  lang: string
+) {
+  const lorePath = contentPaths[lang].DestinyLoreDefinition;
+
+  const lore: { [hash: number]: DestinyLoreDefinition } = await fetch(
+    `https://bungie.net${lorePath}`
+  )
+    .then((res) => res.json())
+    .then((body: { [hash: number]: DestinyLoreDefinition }) => body);
+
+  const date = new Date();
+
+  const metadata = {
+    id: '0',
+    cover: './assets/cover.jpg',
+    genre: 'Science Fiction',
+    title: 'Grimoire', // *Required, title of the book.
+    author: 'Bungie', // *Required, name of the author.
+    language: lang,
+    contents: 'Table of Contents',
+    source: 'https://www.bungie.net',
+    published: `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`,
+    description: 'The Destiny 2 Grimoire',
+    images: [],
+  };
+
+  const epub = nodepub.document(metadata);
+
+  const loreKeys = Object.keys(lore);
+  const loreArrayWithDupes = [];
+  const uniqueNames = new Set();
+  const loreArray = [];
+
+  for (const key of loreKeys) {
+    loreArrayWithDupes.push(lore[Number(key)]);
+  }
+
+  loreArrayWithDupes.sort(
+    (a: DestinyLoreDefinition, b: DestinyLoreDefinition) => a.index - b.index
+  );
+
+  for (const loreItem of loreArrayWithDupes) {
+    if (uniqueNames.has(loreItem.displayProperties.name)) {
+      continue;
+    }
+    uniqueNames.add(loreItem.displayProperties.name);
+    loreArray.push(loreItem);
+  }
+
+  for (const loreItem of loreArray) {
+    const title = loreItem.displayProperties.name;
+    const data =
+      loreItem.displayProperties.description.length &&
+      loreItem.displayProperties.description !== 'Keep it secret.  Keep it safe.'
+        ? loreItem.displayProperties.description
+            .split('\n\n')
+            .map((i) => `<p>${i}</p>`)
+            .join('')
+            .split('\n')
+            .join('<br>')
+        : '';
+
+    if (title && data) {
+      epub.addSection(title, `<h1>${title}</h1>${data}`);
+    } // else console.log(loreItem);
+  }
+
+  await epub.writeEPUB('./epub', `grimoire-${lang}`);
+};
 
 // do the thing
 (async () => {
@@ -28,45 +104,15 @@ const skipCheck = process.env.SKIP_CHECK === 'true' ? true : false;
     }
     // if you are here, there's a new manifest
     console.log('New manifest detected');
-
-    writeFileSync('latest.json', `${JSON.stringify(current, null, 2)}\n`, 'utf8');
-    writeFileSync('README.md', newREADME, 'utf8');
   }
 
-  const buildMessage = `New manifest build - ${current}`;
+  const contentPaths = manifestMetadata.Response.jsonWorldComponentContentPaths;
+  await Promise.all(Object.keys(contentPaths).map((lang) => generateEpubs(contentPaths, lang)));
+
+  writeFileSync('latest.json', `${JSON.stringify(current, null, 2)}\n`, 'utf8');
+  writeFileSync('README.md', newREADME, 'utf8');
 
   // if (!/^[.\w-]+$/.test(versionNumber)) { I AM NOT REALLY SURE THIS NEEDS DOING. }
-
-  const buildOptions = {
-    url: 'https://api.github.com/repos/DestinyItemManager/d2-additional-info/dispatches',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Authorization: 'Basic ' + btoa(process.env.PAT || ''),
-      'User-Agent': 'd2-additional-info',
-    },
-    body: JSON.stringify({
-      event_type: 'new-manifest-detected',
-      client_payload: {
-        message: buildMessage,
-        branch: 'master',
-        config: {
-          env: {
-            MANIFEST_VERSION: current,
-          },
-        },
-      },
-    }),
-    json: true,
-    method: 'POST',
-  };
-  const githubFetch = await fetch(buildOptions.url, buildOptions);
-
-  if (!githubFetch.ok) {
-    console.log('Github returned an error');
-    console.log(githubFetch);
-    process.exit(1);
-  }
 })().catch((e) => {
   console.log(e);
   process.exit(1);
