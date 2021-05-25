@@ -93,7 +93,7 @@ const generateEpubs = async function (
   const manifestMetadata = await getDestinyManifest(httpClient);
 
   const current = manifestMetadata.Response.version;
-  const newREADME = `# d2-manifest-bot\ngithub action for checking for new d2 manifest\n\n# Current Manifest: ${current}`;
+  const newREADME = `# d2-grimoire-epub\ngithub action for generating grimoire epub files when the d2 manifest is updated\n\n# Current Manifest: ${current}`;
 
   if (!skipCheck) {
     console.log(`Latest:  ${latest}`);
