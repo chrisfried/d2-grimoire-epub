@@ -82,7 +82,7 @@ const addSection = async function (epub: any, definitionTreeNode: DefinitionTree
           .map((i) => `<p>${i}</p>`)
           .join('')
           .split('\n')
-          .join('<br>')}`
+          .join('<br />')}`
       : `<img class="presentationNodeIcon" src="${`../images/${iconPath}`}" />
       <h1 class="presentationNodeTitle">${title}</h1>`;
 
@@ -275,7 +275,7 @@ const generateEpub = async function (
   //           .map((i) => `<p>${i}</p>`)
   //           .join('')
   //           .split('\n')
-  //           .join('<br>')
+  //           .join('<br />')
   //       : '';
 
   //   if (title && data) {
