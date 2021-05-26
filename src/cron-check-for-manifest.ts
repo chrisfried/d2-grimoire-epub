@@ -291,7 +291,7 @@ const generateEpub = async function (
   const manifestMetadata = await getDestinyManifest(httpClient);
 
   const current = manifestMetadata.Response.version;
-  const newREADME = `# d2-grimoire-epub\ngithub action for generating grimoire epub files when the d2 manifest is updated\n\n# Current Manifest: ${current}`;
+  let newREADME = `# d2-grimoire-epub\ngithub action for generating grimoire epub files when the d2 manifest is updated\n\n Current Manifest: ${current}\n\n# Downloads\n\n`;
 
   if (!skipCheck) {
     console.log(`Latest:  ${latest}`);
@@ -310,6 +310,7 @@ const generateEpub = async function (
   const contentPaths = manifestMetadata.Response.jsonWorldComponentContentPaths;
   for (const lang of Object.keys(contentPaths)) {
     await generateEpub(contentPaths, lang);
+    newREADME = `${newREADME}- [grimoire-${lang}.epub](epub/grimoire-${lang}.epub)\n`;
   }
   // await Promise.all(Object.keys(contentPaths).map((lang) => generateEpub(contentPaths, lang)));
 
