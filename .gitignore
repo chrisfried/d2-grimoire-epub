@@ -2,3 +2,4 @@ node_modules/
 manifests/
 built/
 yarn-error.log
+assets/icons/*
