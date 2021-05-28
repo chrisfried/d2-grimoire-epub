@@ -2,7 +2,9 @@
 
 import fetch from 'cross-fetch';
 import {
+  DestinyCollectibleDefinition,
   DestinyDefinition,
+  DestinyInventoryItemDefinition,
   DestinyLoreDefinition,
   DestinyPresentationNodeDefinition,
   DestinyRecordDefinition,
@@ -14,6 +16,7 @@ import fse from 'fs-extra';
 import * as nodepub from 'nodepub';
 import { pipeline } from 'stream';
 import { promisify } from 'util';
+import sharp from 'sharp';
 
 const { writeFileSync } = fse;
 const httpClient = generateHttpClient(fetch, process.env.API_KEY);
@@ -36,11 +39,21 @@ const fetchDefinition = async function (
   return definitions;
 };
 
-const downloadFile = async (url: string, path: string) => {
-  const streamPipeline = promisify(pipeline);
+const downloadFile = async (
+  url: string,
+  path: string,
+  resizePath?: string,
+  width?: number,
+  height?: number
+) => {
   const response = await fetch(url);
   if (!response.ok || !response.body) throw new Error(`unexpected response ${response.statusText}`);
+  const streamPipeline = promisify(pipeline);
   await streamPipeline(<any>response.body, fse.createWriteStream(path));
+
+  if (resizePath && width && height) {
+    await sharp(path).resize(width, height).toFile(resizePath);
+  }
 };
 
 const prepImages = async function (
@@ -49,15 +62,35 @@ const prepImages = async function (
 ) {
   if (
     definitionTreeNode.type === 'DestinyPresentationNodeDefinition' &&
-    definitionTreeNode.definition.displayProperties.hasIcon
+    definitionTreeNode.definition?.displayProperties.hasIcon
   ) {
     const splitPath = definitionTreeNode.definition.displayProperties.icon.split('/');
     const iconPath = splitPath[splitPath.length - 1];
-    await downloadFile(
-      `https://bungie.net${definitionTreeNode.definition.displayProperties.icon}`,
-      `./assets/icons/${iconPath}`
-    );
-    metadata.images.push(`./assets/icons/${iconPath}`);
+    if (!fse.existsSync(`./assets/icons/${iconPath}`)) {
+      await downloadFile(
+        `https://bungie.net${definitionTreeNode.definition.displayProperties.icon}`,
+        `./assets/icons/${iconPath}`
+      );
+    }
+    if (fse.existsSync(`./assets/icons/${iconPath}`)) {
+      metadata.images.push(`./assets/icons/${iconPath}`);
+    }
+  }
+  if (definitionTreeNode.inventoryItemDefinition?.screenshot) {
+    const splitPath = definitionTreeNode.inventoryItemDefinition.screenshot.split('/');
+    const screenshotPath = splitPath[splitPath.length - 1];
+    if (!fse.existsSync(`./assets/screenshots/${screenshotPath}`)) {
+      await downloadFile(
+        `https://bungie.net${definitionTreeNode.inventoryItemDefinition.screenshot}`,
+        `./assets/screenshotsLarge/${screenshotPath}`,
+        `./assets/screenshots/${screenshotPath}`,
+        960,
+        540
+      );
+    }
+    if (fse.existsSync(`./assets/screenshots/${screenshotPath}`)) {
+      metadata.images.push(`./assets/screenshots/${screenshotPath}`);
+    }
   }
   for (const child of definitionTreeNode.childrenSorted) {
     await prepImages(metadata, child);
@@ -66,25 +99,43 @@ const prepImages = async function (
 
 const addSection = async function (epub: any, definitionTreeNode: DefinitionTreeNode) {
   let iconPath = '';
+  let screenshotPath = '';
   if (
     definitionTreeNode.type === 'DestinyPresentationNodeDefinition' &&
-    definitionTreeNode.definition.displayProperties.hasIcon
+    definitionTreeNode.definition?.displayProperties.hasIcon
   ) {
     const splitPath = definitionTreeNode.definition.displayProperties.icon.split('/');
     iconPath = splitPath[splitPath.length - 1];
   }
-  const title = definitionTreeNode.definition.displayProperties.name;
+  if (definitionTreeNode.inventoryItemDefinition?.screenshot) {
+    const splitPath = definitionTreeNode.inventoryItemDefinition?.screenshot.split('/');
+    screenshotPath = splitPath[splitPath.length - 1];
+  }
+  const title = definitionTreeNode.definition?.displayProperties.name;
 
-  const data =
-    definitionTreeNode.type === 'DestinyLoreDefinition'
-      ? `<h1>${title}</h1>${definitionTreeNode.definition.displayProperties.description
-          .split('\n\n')
-          .map((i) => `<p>${i}</p>`)
-          .join('')
-          .split('\n')
-          .join('<br />')}`
-      : `<img class="presentationNodeIcon" src="${`../images/${iconPath}`}" />
-      <h1 class="presentationNodeTitle">${title}</h1>`;
+  let data = '';
+
+  if (
+    iconPath &&
+    definitionTreeNode.type === 'DestinyPresentationNodeDefinition' &&
+    fse.existsSync(`./assets/icons/${iconPath}`)
+  ) {
+    data = `${data}<img class="presentationNodeIcon" src="../images/${iconPath}" />`;
+  }
+  if (screenshotPath) {
+    data = `${data}<img src="../images/${screenshotPath}" />`;
+  }
+
+  data = `${data}<h1 class="${definitionTreeNode.type}">${title}</h1>`;
+
+  if (definitionTreeNode.definition?.displayProperties.description) {
+    data = `${data}${definitionTreeNode.definition?.displayProperties.description
+      .split('\n\n')
+      .map((i) => `<p class="${definitionTreeNode.type}">${i}</p>`)
+      .join('')
+      .split('\n')
+      .join('<br />')}`;
+  }
 
   if (title && data) {
     epub.addSection(title, data);
@@ -95,24 +146,24 @@ const addSection = async function (epub: any, definitionTreeNode: DefinitionTree
   }
 };
 
+let contentsIndex = -1;
+
 const appendContents = function (
   contents: string,
   definitionTreeNode: DefinitionTreeNode,
   links: NodepubContentsLink[]
 ) {
-  const link = links.filter(
-    (l) => l.title === definitionTreeNode.definition.displayProperties.name
-  )[0];
+  contentsIndex++;
+  const link = links[contentsIndex];
   if (definitionTreeNode.type === 'DestinyLoreDefinition') {
     return `${contents}<li><a href="${link.link}">${link.title}</a></li>`;
   } else {
-    const listStart =
-      definitionTreeNode.childrenSorted[0].type === 'DestinyLoreDefinition'
-        ? `<ol type="i">`
-        : `<ul>`;
-    const listEnd =
-      definitionTreeNode.childrenSorted[0].type === 'DestinyLoreDefinition' ? `</ol>` : `</ul>`;
-    contents = `${contents}<li><a href="${link.link}">${link.title}</a></li>`;
+    const listStart = `<ol>`;
+    const listEnd = `</ol>`;
+    contents =
+      definitionTreeNode.definition && link
+        ? `${contents}<li><a href="${link.link}">${link.title}</a></li>`
+        : contents;
     contents = `${contents}${listStart}`;
     for (const child of definitionTreeNode.childrenSorted) {
       contents = appendContents(contents, child, links);
@@ -121,14 +172,56 @@ const appendContents = function (
   }
 };
 
-let definitionTreeRootNode: DefinitionTreeNode | undefined = undefined;
+const sortChildren = function (definitionTreeNode: DefinitionTreeNode) {
+  definitionTreeNode.childrenSorted = Array.from(definitionTreeNode.children).sort(
+    (a, b) => <number>a.definition?.index - <number>b.definition?.index
+  );
+};
+
+const reduceDepth = function (definitionTreeNode: DefinitionTreeNode) {
+  if (
+    definitionTreeNode.childrenSorted.length === 1 &&
+    definitionTreeNode.childrenSorted[0].childrenSorted.length
+  ) {
+    definitionTreeNode.children = definitionTreeNode.childrenSorted[0].children;
+    definitionTreeNode.childrenSorted = definitionTreeNode.childrenSorted[0].childrenSorted;
+    sortChildren(definitionTreeNode);
+    reduceDepth(definitionTreeNode);
+    return;
+  }
+  if (definitionTreeNode.type === 'DestinyPresentationNodeDefinition') {
+    for (const child of definitionTreeNode.childrenSorted) {
+      if (
+        child.type === 'DestinyPresentationNodeDefinition' &&
+        !child.definition?.displayProperties.hasIcon
+      ) {
+        for (const gc of child.childrenSorted) {
+          definitionTreeNode.children.add(gc);
+        }
+        definitionTreeNode.children.delete(child);
+        sortChildren(definitionTreeNode);
+        reduceDepth(definitionTreeNode);
+        return;
+      }
+    }
+  }
+  for (const child of definitionTreeNode.childrenSorted) {
+    reduceDepth(child);
+  }
+};
+
+let definitionTreeRootNode: DefinitionTreeNode = {
+  key: -1,
+  type: 'DestinyPresentationNodeDefinition',
+  children: new Set(),
+  childrenSorted: [],
+};
 
 const makeContentsPage = function (links: NodepubContentsLink[]) {
-  let contents = '<h1>Chapters</h1><ul>';
+  let contents = '<h1>Chapters</h1>';
   if (definitionTreeRootNode) {
     contents = appendContents(contents, definitionTreeRootNode, links);
   }
-  contents = `${contents}</ul>`;
   return contents;
 };
 
@@ -151,8 +244,27 @@ const generateEpub = async function (
   const records = (await fetchDefinition(contentPaths, lang, 'DestinyRecordDefinition')) as {
     [hash: number]: DestinyRecordDefinition;
   };
+  const collectibles = (await fetchDefinition(
+    contentPaths,
+    lang,
+    'DestinyCollectibleDefinition'
+  )) as {
+    [hash: number]: DestinyCollectibleDefinition;
+  };
+  const inventoryItems = (await fetchDefinition(
+    contentPaths,
+    lang,
+    'DestinyInventoryItemDefinition'
+  )) as {
+    [hash: number]: DestinyInventoryItemDefinition;
+  };
 
-  for (const key of Object.keys(presentationNodes)) {
+  const presentationNodeKeys = Object.keys(presentationNodes);
+  presentationNodeKeys.sort(
+    (a, b) => presentationNodes[Number(a)].index - presentationNodes[Number(b)].index
+  );
+
+  for (const key of presentationNodeKeys) {
     const node = presentationNodes[Number(key)];
     if (
       node.parentNodeHashes.length ||
@@ -162,19 +274,25 @@ const generateEpub = async function (
     ) {
       continue;
     }
-    // console.log(node.displayProperties.name, node.displayProperties.description);
   }
 
   const definitionTreeNodeArray: DefinitionTreeNode[] = [];
 
-  for (const key of Object.keys(records)) {
+  const recordKeys = Object.keys(records);
+  recordKeys.sort((a, b) => records[Number(a)].index - records[Number(b)].index);
+
+  for (const key of recordKeys) {
     const node = records[Number(key)];
-    if (!node.loreHash || !node.parentNodeHashes.length) {
+    if (!node.loreHash) {
       continue;
     }
-    const filtered = definitionTreeNodeArray.filter((n) => n.key === node.loreHash);
+    const loreNode = lore[node.loreHash];
+    const filtered = definitionTreeNodeArray.filter(
+      (n) =>
+        n.key === node.loreHash ||
+        n.definition?.displayProperties.description === loreNode.displayProperties.description
+    );
     if (!filtered.length) {
-      const loreNode = lore[node.loreHash];
       let currentDefinitionTreeNode: DefinitionTreeNode = {
         key: node.loreHash,
         type: 'DestinyLoreDefinition',
@@ -200,19 +318,70 @@ const generateEpub = async function (
           (n) => n.key === parentNode.hash
         )[0];
         parentDefinitionTreeNode.children.add(currentDefinitionTreeNode);
-        parentDefinitionTreeNode.childrenSorted = Array.from(
-          parentDefinitionTreeNode.children
-        ).sort((a, b) => a.definition.index - b.definition.index);
+        sortChildren(parentDefinitionTreeNode);
         currentNode = parentNode;
         currentDefinitionTreeNode = parentDefinitionTreeNode;
       }
-      definitionTreeRootNode = currentDefinitionTreeNode;
+      definitionTreeRootNode.children.add(currentDefinitionTreeNode);
+      sortChildren(definitionTreeRootNode);
     }
   }
 
-  while (definitionTreeRootNode && definitionTreeRootNode.childrenSorted.length < 2) {
-    definitionTreeRootNode = definitionTreeRootNode.childrenSorted[0];
+  const collectibleKeys = Object.keys(collectibles);
+  collectibleKeys.sort((a, b) => collectibles[Number(a)].index - collectibles[Number(b)].index);
+
+  for (const key of collectibleKeys) {
+    const node = collectibles[Number(key)];
+    if (!node.itemHash) {
+      continue;
+    }
+    const inventoryItemNode = inventoryItems[node.itemHash];
+    if (!inventoryItemNode.loreHash) {
+      continue;
+    }
+    const loreNode = lore[inventoryItemNode.loreHash];
+    const filtered = definitionTreeNodeArray.filter(
+      (n) =>
+        n.key === inventoryItemNode.loreHash ||
+        n.definition?.displayProperties.description === loreNode.displayProperties.description
+    );
+    if (!filtered.length) {
+      let currentDefinitionTreeNode: DefinitionTreeNode = {
+        key: inventoryItemNode.loreHash,
+        type: 'DestinyLoreDefinition',
+        definition: loreNode,
+        inventoryItemDefinition: inventoryItemNode,
+        children: new Set(),
+        childrenSorted: [],
+      };
+      definitionTreeNodeArray.push(currentDefinitionTreeNode);
+      let currentNode: DestinyCollectibleDefinition | DestinyPresentationNodeDefinition = node;
+      while (currentNode.parentNodeHashes.length) {
+        const parentNode: DestinyPresentationNodeDefinition =
+          presentationNodes[Number(currentNode.parentNodeHashes[0])];
+        if (!definitionTreeNodeArray.filter((n) => n.key === parentNode.hash).length) {
+          definitionTreeNodeArray.push({
+            key: parentNode.hash,
+            type: 'DestinyPresentationNodeDefinition',
+            definition: parentNode,
+            children: new Set(),
+            childrenSorted: [],
+          });
+        }
+        const parentDefinitionTreeNode = definitionTreeNodeArray.filter(
+          (n) => n.key === parentNode.hash
+        )[0];
+        parentDefinitionTreeNode.children.add(currentDefinitionTreeNode);
+        sortChildren(parentDefinitionTreeNode);
+        currentNode = parentNode;
+        currentDefinitionTreeNode = parentDefinitionTreeNode;
+      }
+      definitionTreeRootNode.children.add(currentDefinitionTreeNode);
+      sortChildren(definitionTreeRootNode);
+    }
   }
+
+  reduceDepth(definitionTreeRootNode);
 
   const date = new Date();
 
@@ -220,8 +389,8 @@ const generateEpub = async function (
     id: '0',
     cover: './assets/cover.jpg',
     genre: 'Science Fiction',
-    title: 'Grimoire', // *Required, title of the book.
-    author: 'Bungie', // *Required, name of the author.
+    title: 'Grimoire',
+    author: 'Bungie',
     language: lang,
     contents: 'Table of Contents',
     source: 'https://www.bungie.net',
@@ -230,58 +399,15 @@ const generateEpub = async function (
     images: [],
   };
 
-  if (definitionTreeRootNode) {
-    await prepImages(metadata, definitionTreeRootNode);
-  }
+  await prepImages(metadata, definitionTreeRootNode);
 
   const epub = nodepub.document(metadata, makeContentsPage);
 
   epub.addCSS(
-    `.presentationNodeIcon { text-align: center; margin-top: 20%; margin-left: 40%; width: 20%; } .presentationNodeTitle { text-align: center; }`
+    `.presentationNodeIcon { text-align: center; margin-top: 20%; margin-left: 40%; width: 20%; } .DestinyPresentationNodeDefinition { text-align: center; }`
   );
 
-  if (definitionTreeRootNode) {
-    await addSection(epub, definitionTreeRootNode);
-  }
-
-  // const loreKeys = Object.keys(lore);
-  // const loreArrayWithDupes = [];
-  // const uniqueNames = new Set();
-  // const loreArray = [];
-
-  // for (const key of loreKeys) {
-  //   loreArrayWithDupes.push(lore[Number(key)]);
-  // }
-
-  // loreArrayWithDupes.sort(
-  //   (a: DestinyLoreDefinition, b: DestinyLoreDefinition) => a.index - b.index
-  // );
-
-  // for (const loreItem of loreArrayWithDupes) {
-  //   if (uniqueNames.has(loreItem.displayProperties.name)) {
-  //     continue;
-  //   }
-  //   uniqueNames.add(loreItem.displayProperties.name);
-  //   loreArray.push(loreItem);
-  // }
-
-  // for (const loreItem of loreArray) {
-  //   const title = loreItem.displayProperties.name;
-  //   const data =
-  //     loreItem.displayProperties.description.length &&
-  //     loreItem.displayProperties.description !== 'Keep it secret.  Keep it safe.'
-  //       ? loreItem.displayProperties.description
-  //           .split('\n\n')
-  //           .map((i) => `<p>${i}</p>`)
-  //           .join('')
-  //           .split('\n')
-  //           .join('<br />')
-  //       : '';
-
-  //   if (title && data) {
-  //     epub.addSection(title, `<h1>${title}</h1>${data}`);
-  //   } // else console.log(loreItem);
-  // }
+  await addSection(epub, definitionTreeRootNode);
 
   await epub.writeEPUB('./epub', `grimoire-${lang}`);
 };
@@ -305,15 +431,22 @@ const generateEpub = async function (
   }
 
   fse.emptyDirSync('./assets/icons');
+  fse.emptyDirSync('./assets/screenshotsLarge');
+  fse.emptyDirSync('./assets/screenshots');
   fse.emptyDirSync('./epub');
 
   const contentPaths = manifestMetadata.Response.jsonWorldComponentContentPaths;
   for (const lang of Object.keys(contentPaths)) {
+    definitionTreeRootNode = {
+      key: -1,
+      type: 'DestinyPresentationNodeDefinition',
+      children: new Set(),
+      childrenSorted: [],
+    };
+    contentsIndex = -1;
     await generateEpub(contentPaths, lang);
-    newREADME = `${newREADME}- [grimoire-${lang}.epub](epub/grimoire-${lang}.epub)\n`;
+    newREADME = `${newREADME}- [grimoire-${lang}.epub](https://github.com/chrisfried/d2-grimoire-epub/raw/master/epub/grimoire-${lang}.epub)\n`;
   }
-  // await Promise.all(Object.keys(contentPaths).map((lang) => generateEpub(contentPaths, lang)));
-
   writeFileSync('latest.json', `${JSON.stringify(current, null, 2)}\n`, 'utf8');
   writeFileSync('README.md', newREADME, 'utf8');
 
@@ -326,7 +459,8 @@ const generateEpub = async function (
 interface DefinitionTreeNode {
   key: number;
   type: 'DestinyLoreDefinition' | 'DestinyPresentationNodeDefinition';
-  definition: DestinyLoreDefinition | DestinyPresentationNodeDefinition;
+  definition?: DestinyLoreDefinition | DestinyPresentationNodeDefinition;
+  inventoryItemDefinition?: DestinyInventoryItemDefinition;
   children: Set<DefinitionTreeNode>;
   childrenSorted: DefinitionTreeNode[];
 }
