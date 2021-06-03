@@ -97,6 +97,14 @@ const prepImages = async function (
   }
 };
 
+const sortChildren = function (definitionTreeNode: DefinitionTreeNode) {
+  definitionTreeNode.childrenSorted = Array.from(definitionTreeNode.children).sort((a, b) =>
+    a.collectibleDefinition && b.collectibleDefinition
+      ? a.collectibleDefinition?.index - b.collectibleDefinition?.index
+      : <number>a.definition?.index - <number>b.definition?.index
+  );
+};
+
 const addSection = async function (epub: any, definitionTreeNode: DefinitionTreeNode) {
   let iconPath = '';
   let screenshotPath = '';
@@ -141,6 +149,7 @@ const addSection = async function (epub: any, definitionTreeNode: DefinitionTree
     epub.addSection(title, data);
   } // else console.log(loreItem);
 
+  sortChildren(definitionTreeNode);
   for (const child of definitionTreeNode.childrenSorted) {
     await addSection(epub, child);
   }
@@ -172,19 +181,12 @@ const appendContents = function (
   }
 };
 
-const sortChildren = function (definitionTreeNode: DefinitionTreeNode) {
-  definitionTreeNode.childrenSorted = Array.from(definitionTreeNode.children).sort(
-    (a, b) => <number>a.definition?.index - <number>b.definition?.index
-  );
-};
-
 const reduceDepth = function (definitionTreeNode: DefinitionTreeNode) {
   if (
     definitionTreeNode.childrenSorted.length === 1 &&
     definitionTreeNode.childrenSorted[0].childrenSorted.length
   ) {
     definitionTreeNode.children = definitionTreeNode.childrenSorted[0].children;
-    definitionTreeNode.childrenSorted = definitionTreeNode.childrenSorted[0].childrenSorted;
     sortChildren(definitionTreeNode);
     reduceDepth(definitionTreeNode);
     return;
@@ -206,6 +208,7 @@ const reduceDepth = function (definitionTreeNode: DefinitionTreeNode) {
     }
   }
   for (const child of definitionTreeNode.childrenSorted) {
+    sortChildren(definitionTreeNode);
     reduceDepth(child);
   }
 };
@@ -351,6 +354,7 @@ const generateEpub = async function (
         type: 'DestinyLoreDefinition',
         definition: loreNode,
         inventoryItemDefinition: inventoryItemNode,
+        collectibleDefinition: node,
         children: new Set(),
         childrenSorted: [],
       };
@@ -461,6 +465,7 @@ interface DefinitionTreeNode {
   type: 'DestinyLoreDefinition' | 'DestinyPresentationNodeDefinition';
   definition?: DestinyLoreDefinition | DestinyPresentationNodeDefinition;
   inventoryItemDefinition?: DestinyInventoryItemDefinition;
+  collectibleDefinition?: DestinyCollectibleDefinition;
   children: Set<DefinitionTreeNode>;
   childrenSorted: DefinitionTreeNode[];
 }
