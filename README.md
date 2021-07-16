@@ -1,7 +1,7 @@
 # d2-grimoire-epub
 github action for generating grimoire epub files when the d2 manifest is updated
 
- Current Manifest: 94996.21.06.22.1900-3-bnet.38484
+ Current Manifest: 95626.21.07.08.1900-7-bnet.38616
 
 # Downloads
 
