@@ -70,6 +70,10 @@ const prepImages = async function (
       await downloadFile(
         `https://bungie.net${definitionTreeNode.definition.displayProperties.icon}`,
         `./assets/icons/${iconPath}`
+      ).catch((err) =>
+        console.log(
+          `Error downloading icon for ${definitionTreeNode.definition?.displayProperties.name}`
+        )
       );
     }
     if (fse.existsSync(`./assets/icons/${iconPath}`)) {
@@ -86,6 +90,10 @@ const prepImages = async function (
         `./assets/screenshots/${screenshotPath}`,
         960,
         540
+      ).catch((err) =>
+        console.log(
+          `Error downloading screenshot for ${definitionTreeNode.definition?.displayProperties.name}`
+        )
       );
     }
     if (fse.existsSync(`./assets/screenshots/${screenshotPath}`)) {
