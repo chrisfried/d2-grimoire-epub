@@ -3,3 +3,4 @@ manifests/
 built/
 yarn-error.log
 assets/*/*
+.DS_store
