@@ -138,10 +138,10 @@ const generateEpub = async function (
   for (const key of presentationNodeKeys) {
     const node = presentationNodes[Number(key)];
     if (
-      node.parentNodeHashes.length ||
-      (!node.children.presentationNodes.length &&
-        !node.children.collectibles.length &&
-        !node.children.records.length)
+      node?.parentNodeHashes?.length ||
+      (!node?.children?.presentationNodes.length &&
+        !node?.children?.collectibles.length &&
+        !node?.children?.records.length)
     ) {
       continue;
     }
@@ -173,7 +173,7 @@ const generateEpub = async function (
       };
       definitionTreeNodeArray.push(currentDefinitionTreeNode);
       let currentNode: DestinyRecordDefinition | DestinyPresentationNodeDefinition = node;
-      while (currentNode.parentNodeHashes.length) {
+      while (currentNode?.parentNodeHashes?.length) {
         const parentNode: DestinyPresentationNodeDefinition =
           presentationNodes[Number(currentNode.parentNodeHashes[0])];
         if (!definitionTreeNodeArray.filter((n) => n.key === parentNode.hash).length) {
@@ -228,7 +228,7 @@ const generateEpub = async function (
       };
       definitionTreeNodeArray.push(currentDefinitionTreeNode);
       let currentNode: DestinyCollectibleDefinition | DestinyPresentationNodeDefinition = node;
-      while (currentNode.parentNodeHashes.length) {
+      while (currentNode?.parentNodeHashes?.length) {
         const parentNode: DestinyPresentationNodeDefinition =
           presentationNodes[Number(currentNode.parentNodeHashes[0])];
         if (!definitionTreeNodeArray.filter((n) => n.key === parentNode.hash).length) {
