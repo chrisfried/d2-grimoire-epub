@@ -3,13 +3,19 @@
     "outDir": "./built",
     "strict": true,
     "resolveJsonModule": true,
-    "downlevelIteration": true,
     "esModuleInterop": true,
-    "moduleResolution": "node",
-    "lib": ["ES2020", "DOM"],
-    "target": "ES5",
-    "module": "ES2020",
-    "typeRoots": ["./types", "./node_modules/@types"]
+    "moduleResolution": "node16",
+    "lib": ["ES2023"],
+    "target": "ES2022",
+    "module": "node18",
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "typeRoots": ["./types", "./node_modules/@types"],
+    "paths": {
+      "@d2ai/*": ["./d2ai-module/*"]
+    }
   },
-  "include": ["./src/**/*", "./types/**/*"]
+  "include": ["./src/**/*", "./types/**/*", "./d2ai-module/**/*"],
+  "exclude": ["node_modules", "built"]
 }
