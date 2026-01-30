@@ -32,10 +32,15 @@ jobs:
 
       - name: Check for new files
         id: data
-        run: echo "porcelain=$(git status --porcelain)" >> $GITHUB_OUTPUT
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Commit latest manifest version
-        if: steps.data.outputs.porcelain
+        if: steps.data.outputs.has_changes == 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "D2 Grimoire Epub Bot"
