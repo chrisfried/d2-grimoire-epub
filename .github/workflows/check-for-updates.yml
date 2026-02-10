@@ -1,0 +1,53 @@
+# This workflow generates seasonal EPUBs (one per season)
+name: Check for Updates
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 * * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: github
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for manifest update and generate EPUBs
+        run: npm run manifest:check
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+          SKIP_CHECK: 'false'
+
+      - name: Check for new files
+        id: data
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit latest manifest version
+        if: steps.data.outputs.has_changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "D2 Grimoire Epub Bot"
+
+          git checkout --orphan tmp
+          git add -A
+          git commit -m 'Grimoire Generated'
+          git branch -D master
+          git branch -m master
+          git push -f origin master
