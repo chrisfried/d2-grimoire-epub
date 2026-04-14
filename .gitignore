@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+built/
+manifests/
+
+# Assets (generated)
+assets/*/*
+
+# Output
+output/
+
+# Logs
+yarn-error.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
