@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "outDir": "./built",
+    "strict": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "moduleResolution": "node16",
+    "lib": ["ES2023"],
+    "target": "ES2022",
+    "module": "node18",
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "typeRoots": ["./types", "./node_modules/@types"],
+    "paths": {
+      "@d2ai/*": ["./d2ai-module/*"]
+    }
+  },
+  "include": ["./src/**/*", "./types/**/*", "./d2ai-module/**/*"],
+  "exclude": ["node_modules", "built"]
+}

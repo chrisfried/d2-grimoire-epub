@@ -1,0 +1,30 @@
+{
+  "name": "d2-manifest-bot",
+  "type": "module",
+  "repository": "https://github.com/DestinyItemManager/d2-manifest-bot.git",
+  "license": "MIT",
+  "scripts": {
+    "pretty": "prettier --write \"**/*.{js,ts,tsx,scss,html,json}\"",
+    "lint": "eslint --fix src --ext .js,.ts,.tsx",
+    "manifest:check": "tsc && node built/src/cron-check-for-manifest.js"
+  },
+  "dependencies": {
+    "@d2api/manifest-node": "^2.0.9",
+    "bungie-api-ts": "^5.10.0",
+    "dotenv": "^17.2.3",
+    "fs-extra": "^11.3.3",
+    "nodepub": "^3.2.1",
+    "sharp": "^0.34.5",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^25.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.52.0",
+    "@typescript-eslint/parser": "^8.52.0",
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7",
+    "prettier": "^3.7.4",
+    "pretty-quick": "^4.2.2"
+  }
+}
